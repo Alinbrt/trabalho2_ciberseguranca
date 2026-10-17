@@ -1,7 +1,37 @@
-from enums import TipoAtivo, Severidade, StatusTratamento
+"""Classes de domínio: Vulnerabilidade, Equipamento (e subclasses) e Dependencia."""
 
+from abc import ABC, abstractmethod
+
+from enums import Severidade, StatusTratamento, TipoAtivo
+
+
+def _texto_obrigatorio(valor, campo: str) -> str:
+    """Garante que um campo de texto foi preenchido e remove espaços extras."""
+    if not isinstance(valor, str) or not valor.strip():
+        raise ValueError(f"O campo '{campo}' é obrigatório.")
+    return valor.strip()
+
+
+def validar_responsavel(nome) -> str:
+    """Regra herdada do Trabalho 1: nome com pelo menos 2 caracteres e sem números."""
+    nome = _texto_obrigatorio(nome, "responsável")
+    if len(nome) < 2 or any(caractere.isdigit() for caractere in nome):
+        raise ValueError("Responsável inválido: use pelo menos 2 letras e nenhum número.")
+    return nome
+
+
+def _inteiro_positivo(valor, campo: str) -> int:
+    """Garante um inteiro > 0 (bool é subclasse de int, por isso é recusado)."""
+    if isinstance(valor, bool) or not isinstance(valor, int) or valor <= 0:
+        raise ValueError(f"O campo '{campo}' deve ser um número inteiro positivo.")
+    return valor
+
+
+# --------------------------------------------------------------------------
+# Vulnerabilidade
+# --------------------------------------------------------------------------
 class Vulnerabilidade:
-    """Representa uma fragilidade de seguranca associada a um ativo de TI."""
+    """Fragilidade de segurança registrada em um ativo de TI."""
 
     def __init__(
         self,
@@ -10,32 +40,39 @@ class Vulnerabilidade:
         categoria: str,
         severidade: Severidade,
         status: StatusTratamento = StatusTratamento.ABERTA,
-        cvss: float = None,
+        cvss: float | None = None,
     ):
-        self.cve = cve
-        self.descricao = descricao
-        self.categoria = categoria
+        self.cve = _texto_obrigatorio(cve, "identificador (CVE)").upper()
+        self.descricao = _texto_obrigatorio(descricao, "descrição")
+        self.categoria = _texto_obrigatorio(categoria, "categoria")
+        if not isinstance(severidade, Severidade):
+            raise ValueError("Severidade inválida.")
+        if not isinstance(status, StatusTratamento):
+            raise ValueError("Status de tratamento inválido.")
         self.severidade = severidade
         self.status = status
+        self.cvss = self._definir_cvss(cvss)
 
-        # Mapeamento deterministico de CVSS v3 baseado na mediana de cada faixa oficial
-        scores_padrao = {
-            Severidade.BAIXA: 2.0,
-            Severidade.MEDIA: 5.5,
-            Severidade.ALTA: 8.0,
-            Severidade.CRITICA: 9.5,
-        }
-        self.cvss = cvss if cvss is not None else scores_padrao.get(severidade, 5.0)
+    def _definir_cvss(self, cvss: float | None) -> float:
+        """Usa o CVSS informado (se coerente com a severidade) ou o padrão da faixa."""
+        if cvss is None:
+            return self.severidade.cvss_padrao
+        cvss = float(cvss)
+        minimo, maximo = self.severidade.faixa_cvss
+        if not minimo <= cvss <= maximo:
+            raise ValueError(
+                f"CVSS {cvss} incompatível com severidade {self.severidade.value} "
+                f"(faixa {minimo}–{maximo})."
+            )
+        return cvss
 
-    def atualizar_status(self, novo_status: StatusTratamento):
-        """Regra de negocio: status Corrigida e terminal e nao pode ser alterado."""
+    def atualizar_status(self, novo_status: StatusTratamento) -> None:
+        """Regra de negócio: 'Corrigida' é um status terminal."""
         if self.status == StatusTratamento.CORRIGIDA:
-            return False, "Vulnerabilidade ja corrigida. Status consolidado."
+            raise ValueError("Vulnerabilidade já corrigida: o status não pode mais ser alterado.")
         self.status = novo_status
-        return True, f"Status atualizado para {novo_status.value}."
 
-    def to_dict(self):
-        """Serializacao em dicionario para persistencia em JSON."""
+    def to_dict(self) -> dict:
         return {
             "cve": self.cve,
             "descricao": self.descricao,
@@ -45,9 +82,32 @@ class Vulnerabilidade:
             "cvss": self.cvss,
         }
 
+    @classmethod
+    def from_dict(cls, dados: dict) -> "Vulnerabilidade":
+        return cls(
+            cve=dados["cve"],
+            descricao=dados["descricao"],
+            categoria=dados["categoria"],
+            severidade=Severidade(dados["severidade"]),
+            status=StatusTratamento(dados["status"]),
+            cvss=dados.get("cvss"),
+        )
 
-class Equipamento:
-    """Classe base que representa um ativo de TI generico no inventario."""
+    def __str__(self) -> str:
+        return (
+            f"[{self.cve}] {self.descricao} | Categoria: {self.categoria} | "
+            f"Severidade: {self.severidade.value} (CVSS {self.cvss:.1f}) | "
+            f"Status: {self.status.value}"
+        )
+
+
+# --------------------------------------------------------------------------
+# Equipamento (classe base abstrata) e subclasses
+# --------------------------------------------------------------------------
+class Equipamento(ABC):
+    """Ativo de TI genérico. Não é instanciado diretamente: cada tipo é uma subclasse."""
+
+    TIPO: TipoAtivo  # definido em cada subclasse
 
     def __init__(
         self,
@@ -55,62 +115,225 @@ class Equipamento:
         hostname: str,
         responsavel: str,
         localizacao: str,
-        tipo: TipoAtivo,
+        descricao: str = "",
     ):
-        self.id_ativo = id_ativo
-        self.hostname = hostname
+        self._id_ativo = _inteiro_positivo(id_ativo, "identificador")
+        self.hostname = hostname          # passa pela validação do setter
         self.responsavel = responsavel
         self.localizacao = localizacao
-        self.tipo = tipo
-        self.vulnerabilidades: list[Vulnerabilidade] = []
+        self.descricao = descricao
+        # Dicionário CVE -> Vulnerabilidade: busca O(1) e impede CVE repetido no ativo
+        self._vulnerabilidades: dict[str, Vulnerabilidade] = {}
 
-    def adicionar_vulnerabilidade(self, vulnerabilidade: Vulnerabilidade):
-        self.vulnerabilidades.append(vulnerabilidade)
+    # --- Encapsulamento: atributos validados via property ----------------
+    @property
+    def id_ativo(self) -> int:
+        """Identificador único: somente leitura depois de criado."""
+        return self._id_ativo
 
+    @property
+    def hostname(self) -> str:
+        return self._hostname
+
+    @hostname.setter
+    def hostname(self, valor: str) -> None:
+        self._hostname = _texto_obrigatorio(valor, "hostname")
+
+    @property
+    def responsavel(self) -> str:
+        return self._responsavel
+
+    @responsavel.setter
+    def responsavel(self, valor: str) -> None:
+        self._responsavel = validar_responsavel(valor)
+
+    @property
+    def localizacao(self) -> str:
+        return self._localizacao
+
+    @localizacao.setter
+    def localizacao(self, valor: str) -> None:
+        self._localizacao = _texto_obrigatorio(valor, "localização")
+
+    @property
+    def descricao(self) -> str:
+        return self._descricao
+
+    @descricao.setter
+    def descricao(self, valor: str) -> None:
+        self._descricao = (valor or "").strip()
+
+    @property
+    def tipo(self) -> TipoAtivo:
+        return self.TIPO
+
+    @property
+    def vulnerabilidades(self) -> list[Vulnerabilidade]:
+        """Cópia da lista: quem está de fora não altera o dicionário interno."""
+        return list(self._vulnerabilidades.values())
+
+    # --- Vulnerabilidades ---------------------------------------------------
+    def adicionar_vulnerabilidade(self, vulnerabilidade: Vulnerabilidade) -> None:
+        if vulnerabilidade.cve in self._vulnerabilidades:
+            raise ValueError(f"O ativo já possui a vulnerabilidade {vulnerabilidade.cve}.")
+        self._vulnerabilidades[vulnerabilidade.cve] = vulnerabilidade
+
+    def buscar_vulnerabilidade(self, cve: str) -> Vulnerabilidade | None:
+        return self._vulnerabilidades.get(cve.strip().upper())
+
+    def remover_vulnerabilidade(self, cve: str) -> bool:
+        return self._vulnerabilidades.pop(cve.strip().upper(), None) is not None
+
+    # --- Polimorfismo -------------------------------------------------------
+    @abstractmethod
     def fator_exposicao(self) -> float:
-        """Metodo polimorfico base para ponderacao de risco no modelo linear."""
-        return 0.10
+        """Peso do tipo de ativo no risco próprio: b_i = (1 + fator) * (M v)_i."""
 
-    def to_dict(self):
-        """Serializacao compativel com o array JSON exigido no Requisito 2."""
+    def com_novo_tipo(self, novo_tipo: TipoAtivo) -> "Equipamento":
+        """Trocar o tipo exige trocar a classe: cria o objeto da subclasse certa
+        mantendo os dados e as vulnerabilidades."""
+        novo = criar_equipamento(
+            novo_tipo, self.id_ativo, self.hostname, self.responsavel,
+            self.localizacao, self.descricao,
+        )
+        novo._vulnerabilidades = dict(self._vulnerabilidades)
+        return novo
+
+    # --- Serialização -------------------------------------------------------
+    def to_dict(self) -> dict:
         return {
             "id": self.id_ativo,
             "hostname": self.hostname,
             "responsavel": self.responsavel,
             "localizacao": self.localizacao,
+            "descricao": self.descricao,
             "tipo": self.tipo.name,
             "tipo_codigo": self.tipo.value,
             "vulnerabilidades": [v.to_dict() for v in self.vulnerabilidades],
         }
 
+    @staticmethod
+    def from_dict(dados: dict) -> "Equipamento":
+        equipamento = criar_equipamento(
+            TipoAtivo(dados["tipo_codigo"]),
+            dados["id"],
+            dados["hostname"],
+            dados["responsavel"],
+            dados["localizacao"],
+            dados.get("descricao", ""),
+        )
+        for v_dados in dados.get("vulnerabilidades", []):
+            equipamento.adicionar_vulnerabilidade(Vulnerabilidade.from_dict(v_dados))
+        return equipamento
+
+    def __str__(self) -> str:
+        texto = (
+            f"ID {self.id_ativo} | {self.hostname} | Tipo: {self.tipo.rotulo} "
+            f"(código {self.tipo.value})\n"
+            f"   Responsável: {self.responsavel} | Localização: {self.localizacao}"
+        )
+        if self.descricao:
+            texto += f"\n   Descrição: {self.descricao}"
+        return texto
+
 
 class Notebook(Equipamento):
-    def __init__(self, id_ativo: int, hostname: str, responsavel: str, localizacao: str):
-        super().__init__(id_ativo, hostname, responsavel, localizacao, TipoAtivo.NOTEBOOK)
+    TIPO = TipoAtivo.NOTEBOOK
 
     def fator_exposicao(self) -> float:
-        return 0.05  # Dispositivo de borda: exposicao lateral contida
+        return 0.05  # dispositivo de borda: exposição lateral contida
 
 
 class Servidor(Equipamento):
-    def __init__(self, id_ativo: int, hostname: str, responsavel: str, localizacao: str):
-        super().__init__(id_ativo, hostname, responsavel, localizacao, TipoAtivo.SERVIDOR)
+    TIPO = TipoAtivo.SERVIDOR
 
     def fator_exposicao(self) -> float:
-        return 0.20  # Ativo central: alto impacto lateral
+        return 0.20  # ativo central: alto impacto se comprometido
 
 
 class Roteador(Equipamento):
-    def __init__(self, id_ativo: int, hostname: str, responsavel: str, localizacao: str):
-        super().__init__(id_ativo, hostname, responsavel, localizacao, TipoAtivo.ROTEADOR)
+    TIPO = TipoAtivo.ROTEADOR
 
     def fator_exposicao(self) -> float:
-        return 0.30  # Gateway: ponto critico de transmissao de dependencias
+        return 0.30  # gateway: ponto crítico de passagem de tráfego
 
 
 class EstacaoTrabalho(Equipamento):
-    def __init__(self, id_ativo: int, hostname: str, responsavel: str, localizacao: str):
-        super().__init__(id_ativo, hostname, responsavel, localizacao, TipoAtivo.ESTACAO_TRABALHO)
+    TIPO = TipoAtivo.ESTACAO_TRABALHO
 
     def fator_exposicao(self) -> float:
-        return 0.10  # Exposicao padrao de endpoint fixo
+        return 0.10  # endpoint fixo: exposição padrão
+
+
+class AplicacaoWeb(Equipamento):
+    TIPO = TipoAtivo.APLICACAO_WEB
+
+    def fator_exposicao(self) -> float:
+        return 0.25  # exposta à internet: superfície de ataque ampla
+
+
+class BancoDeDados(Equipamento):
+    TIPO = TipoAtivo.BANCO_DE_DADOS
+
+    def fator_exposicao(self) -> float:
+        return 0.20  # guarda dados sensíveis: alto impacto se comprometido
+
+
+# Fábrica: dicionário tipo -> classe. Novo tipo = nova subclasse + uma linha aqui.
+CLASSES_POR_TIPO: dict[TipoAtivo, type[Equipamento]] = {
+    TipoAtivo.NOTEBOOK: Notebook,
+    TipoAtivo.SERVIDOR: Servidor,
+    TipoAtivo.ROTEADOR: Roteador,
+    TipoAtivo.ESTACAO_TRABALHO: EstacaoTrabalho,
+    TipoAtivo.APLICACAO_WEB: AplicacaoWeb,
+    TipoAtivo.BANCO_DE_DADOS: BancoDeDados,
+}
+
+
+def criar_equipamento(
+    tipo: TipoAtivo,
+    id_ativo: int,
+    hostname: str,
+    responsavel: str,
+    localizacao: str,
+    descricao: str = "",
+) -> Equipamento:
+    """Instancia a subclasse correspondente ao tipo informado."""
+    classe = CLASSES_POR_TIPO[tipo]
+    return classe(id_ativo, hostname, responsavel, localizacao, descricao)
+
+
+# --------------------------------------------------------------------------
+# Dependência entre equipamentos (entrada A[i][j] da matriz do modelo)
+# --------------------------------------------------------------------------
+class Dependencia:
+    """Fração do risco do ativo de ORIGEM (j) transmitida ao ativo de DESTINO (i).
+
+    Corresponde a A[i][j] = fracao no modelo x = b + A x.
+    """
+
+    def __init__(self, id_origem: int, id_destino: int, fracao: float):
+        self.id_origem = _inteiro_positivo(id_origem, "ativo de origem")
+        self.id_destino = _inteiro_positivo(id_destino, "ativo de destino")
+        if self.id_origem == self.id_destino:
+            raise ValueError("Um ativo não pode depender de si mesmo (A_ii = 0).")
+        fracao = float(fracao)
+        if not 0 <= fracao < 1:
+            raise ValueError("A fração deve estar no intervalo [0, 1).")
+        self.fracao = fracao
+
+    @property
+    def chave(self) -> tuple[int, int]:
+        return (self.id_origem, self.id_destino)
+
+    def to_dict(self) -> dict:
+        return {"id_origem": self.id_origem, "id_destino": self.id_destino, "fracao": self.fracao}
+
+    @classmethod
+    def from_dict(cls, dados: dict) -> "Dependencia":
+        return cls(dados["id_origem"], dados["id_destino"], dados["fracao"])
+
+    def __str__(self) -> str:
+        return (
+            f"Ativo {self.id_destino} herda {self.fracao:.0%} do risco do ativo {self.id_origem}"
+        )

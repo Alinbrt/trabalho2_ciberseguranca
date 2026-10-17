@@ -1,97 +1,67 @@
+"""Leitura e gravação de arrays de objetos JSON em disco."""
+
 import json
 import os
-from enums import TipoAtivo, Severidade, StatusTratamento
-from modelos import Equipamento, Notebook, Servidor, Roteador, EstacaoTrabalho, Vulnerabilidade
-
-ARQUIVO_INVENTARIO = "inventario_ativos.json"
-ARQUIVO_DEPENDENCIAS = "dependencias_rede.json"
-
-def instanciar_equipamento(dados: dict) -> Equipamento:
-    """Factory function que instancia a subclasse correta baseada no tipo do ativo."""
-    tipo_cod = dados.get("tipo_codigo")
-    id_ativo = dados.get("id")
-    hostname = dados.get("hostname")
-    responsavel = dados.get("responsavel")
-    localizacao = dados.get("localizacao")
-
-    if tipo_cod == TipoAtivo.NOTEBOOK.value:
-        equip = Notebook(id_ativo, hostname, responsavel, localizacao)
-    elif tipo_cod == TipoAtivo.SERVIDOR.value:
-        equip = Servidor(id_ativo, hostname, responsavel, localizacao)
-    elif tipo_cod == TipoAtivo.ROTEADOR.value:
-        equip = Roteador(id_ativo, hostname, responsavel, localizacao)
-    elif tipo_cod == TipoAtivo.ESTACAO_TRABALHO.value:
-        equip = EstacaoTrabalho(id_ativo, hostname, responsavel, localizacao)
-    else:
-        equip = Equipamento(id_ativo, hostname, responsavel, localizacao, TipoAtivo(tipo_cod))
-
-    for v_dado in dados.get("vulnerabilidades", []):
-        vuln = Vulnerabilidade(
-            cve=v_dado["cve"],
-            descricao=v_dado["descricao"],
-            categoria=v_dado["categoria"],
-            severidade=Severidade(v_dado["severidade"]),
-            status=StatusTratamento(v_dado["status"]),
-            cvss=v_dado.get("cvss")
-        )
-        equip.adicionar_vulnerabilidade(vuln)
-
-    return equip
+from datetime import datetime
 
 
-def salvar_inventario(ativos: list[Equipamento], caminho: str = ARQUIVO_INVENTARIO) -> bool:
-    """Grava os ativos como um array de objetos JSON conforme Requisito 2."""
-    try:
-        dados_serializados = [ativo.to_dict() for ativo in ativos]
-        with open(caminho, "w", encoding="utf-8") as arquivo:
-            json.dump(dados_serializados, arquivo, indent=4, ensure_ascii=False)
-        return True
-    except IOError as erro:
-        print(f"Erro ao salvar arquivo de inventario: {erro}")
-        return False
+class ErroPersistencia(Exception):
+    """Falha ao ler ou gravar a base de dados."""
 
 
-def carregar_inventario(caminho: str = ARQUIVO_INVENTARIO) -> list[Equipamento]:
-    """Le o array JSON e reconstrói as instancias de Equipamento na memoria."""
-    if not os.path.exists(caminho):
-        return []
+class RepositorioJSON:
+    """Guarda uma lista de dicionários como um array JSON em um arquivo."""
 
-    try:
-        with open(caminho, "r", encoding="utf-8") as arquivo:
-            conteudo = arquivo.read().strip()
-            if not conteudo:
-                return []
-            dados_brutos = json.loads(conteudo)
+    def __init__(self, caminho: str):
+        self.caminho = caminho
+        pasta = os.path.dirname(caminho)
+        if pasta:
+            os.makedirs(pasta, exist_ok=True)
 
-            if isinstance(dados_brutos, list):
-                return [instanciar_equipamento(item) for item in dados_brutos]
+    def carregar(self) -> list[dict]:
+        """Lê o array JSON. Arquivo inexistente ou vazio = base vazia.
+
+        Se o arquivo estiver corrompido, ele é renomeado para backup em vez de
+        ser sobrescrito no próximo salvamento (evita perder todos os dados).
+        """
+        if not os.path.exists(self.caminho):
             return []
-    except (json.JSONDecodeError, IOError) as erro:
-        print(f"Aviso: Erro ao carregar inventario ({erro}). Iniciando base vazia.")
-        return []
-
-
-def salvar_dependencias(matriz_dep: list[list[float]], caminho: str = ARQUIVO_DEPENDENCIAS) -> bool:
-    """Persiste a matriz de dependencias no formato JSON exigido na Secao 2."""
-    try:
-        with open(caminho, "w", encoding="utf-8") as arquivo:
-            json.dump(matriz_dep, arquivo, indent=4)
-        return True
-    except IOError as erro:
-        print(f"Erro ao salvar matriz de dependencias: {erro}")
-        return False
-
-
-def carregar_dependencias(caminho: str = ARQUIVO_DEPENDENCIAS) -> list[list[float]]:
-    """Carrega a matriz de dependencias persistida em JSON."""
-    if not os.path.exists(caminho):
-        return []
-
-    try:
-        with open(caminho, "r", encoding="utf-8") as arquivo:
-            conteudo = arquivo.read().strip()
+        try:
+            with open(self.caminho, "r", encoding="utf-8") as arquivo:
+                conteudo = arquivo.read().strip()
             if not conteudo:
                 return []
-            return json.loads(conteudo)
-    except (json.JSONDecodeError, IOError):
-        return []
+            dados = json.loads(conteudo)
+            if not isinstance(dados, list):
+                raise ValueError("o arquivo não contém um array JSON")
+            return dados
+        except (json.JSONDecodeError, ValueError) as erro:
+            backup = self._mover_para_backup()
+            raise ErroPersistencia(
+                f"Arquivo '{self.caminho}' inválido ({erro}). "
+                f"Cópia preservada em '{backup}'; iniciando base vazia."
+            ) from erro
+        except OSError as erro:
+            raise ErroPersistencia(f"Não foi possível ler '{self.caminho}': {erro}") from erro
+
+    def salvar(self, dados: list[dict]) -> None:
+        """Gravação atômica: escreve num arquivo temporário e troca de uma vez.
+
+        Se o programa cair no meio da escrita, o arquivo original continua intacto.
+        """
+        temporario = self.caminho + ".tmp"
+        try:
+            with open(temporario, "w", encoding="utf-8") as arquivo:
+                json.dump(dados, arquivo, indent=4, ensure_ascii=False)
+            os.replace(temporario, self.caminho)
+        except OSError as erro:
+            raise ErroPersistencia(f"Não foi possível gravar '{self.caminho}': {erro}") from erro
+
+    def _mover_para_backup(self) -> str:
+        carimbo = datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup = f"{self.caminho}.corrompido-{carimbo}"
+        try:
+            os.replace(self.caminho, backup)
+        except OSError:
+            return "(falha ao criar backup)"
+        return backup
