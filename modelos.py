@@ -25,11 +25,10 @@ def validar_responsavel(nome) -> str:
 
 
 def _inteiro_positivo(valor, campo: str) -> int:
-    """Garante um inteiro > 0 (bool é subclasse de int, por isso é recusado)."""
-    if isinstance(valor, bool) or not isinstance(valor, int) or valor <= 0:
+    # O identificador precisa ser um número inteiro maior que zero.
+    if not isinstance(valor, int) or valor <=0:
         raise ValueError(f"O campo '{campo}' deve ser um número inteiro positivo.")
     return valor
-
 
 class Vulnerabilidade:
     """Fragilidade de segurança registrada em um ativo de TI."""
