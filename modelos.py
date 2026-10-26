@@ -13,10 +13,14 @@ def _texto_obrigatorio(valor, campo: str) -> str:
 
 
 def validar_responsavel(nome) -> str:
-    """Regra herdada do Trabalho 1: nome com pelo menos 2 caracteres e sem números."""
+    # Lista de permissão: aceito só o que é válido num nome de pessoa.
+    # Assim barro injeção (ex: <script>) e textos gigantes, não só números.
     nome = _texto_obrigatorio(nome, "responsável")
-    if len(nome) < 2 or any(caractere.isdigit() for caractere in nome):
-        raise ValueError("Responsável inválido: use pelo menos 2 letras e nenhum número.")
+    if len(nome) < 2 or len(nome) > 100:
+        raise ValueError("O responsável deve ter entre 2 e 100 caracteres.")
+    for caractere in nome:
+        if not (caractere.isalpha() or caractere in " -'"):
+            raise ValueError("O responsável só pode ter letras, espaço, hífen e apóstrofo.")
     return nome
 
 
