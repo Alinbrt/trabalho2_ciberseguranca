@@ -31,9 +31,6 @@ def _inteiro_positivo(valor, campo: str) -> int:
     return valor
 
 
-# --------------------------------------------------------------------------
-# Vulnerabilidade
-# --------------------------------------------------------------------------
 class Vulnerabilidade:
     """Fragilidade de segurança registrada em um ativo de TI."""
 
@@ -105,9 +102,6 @@ class Vulnerabilidade:
         )
 
 
-# --------------------------------------------------------------------------
-# Equipamento (classe base abstrata) e subclasses
-# --------------------------------------------------------------------------
 class Equipamento(ABC):
     """Ativo de TI genérico. Não é instanciado diretamente: cada tipo é uma subclasse."""
 
@@ -307,9 +301,6 @@ def criar_equipamento(
     return classe(id_ativo, hostname, responsavel, localizacao, descricao)
 
 
-# --------------------------------------------------------------------------
-# Dependência entre equipamentos (entrada A[i][j] da matriz do modelo)
-# --------------------------------------------------------------------------
 class Dependencia:
     """Fração do risco do ativo de ORIGEM (j) transmitida ao ativo de DESTINO (i).
 
