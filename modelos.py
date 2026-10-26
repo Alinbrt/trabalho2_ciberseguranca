@@ -6,7 +6,7 @@ from enums import Severidade, StatusTratamento, TipoAtivo
 
 
 def _texto_obrigatorio(valor, campo: str) -> str:
-    """Garante que um campo de texto foi preenchido e remove espaços extras."""
+    """Impede um campo vazio e retorna o texto sem espaços nas pontas."""
     if not isinstance(valor, str) or not valor.strip():
         raise ValueError(f"O campo '{campo}' é obrigatório.")
     return valor.strip()
@@ -31,7 +31,7 @@ def _inteiro_positivo(valor, campo: str) -> int:
     return valor
 
 class Vulnerabilidade:
-    """Fragilidade de segurança registrada em um ativo de TI."""
+    """Representa uma fraqueza de um ativo que pode ser explorada."""
 
     def __init__(
         self,
@@ -102,7 +102,7 @@ class Vulnerabilidade:
 
 
 class Equipamento(ABC):
-    """Ativo de TI genérico. Não é instanciado diretamente: cada tipo é uma subclasse."""
+    """Representa um ativo de TI, peça central que guarda seus dados e vulnerabilidades"""
 
     TIPO: TipoAtivo  # definido em cada subclasse
 
