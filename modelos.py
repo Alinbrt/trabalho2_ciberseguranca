@@ -122,7 +122,7 @@ class Equipamento(ABC):
         # Dicionário CVE -> Vulnerabilidade: busca O(1) e impede CVE repetido no ativo
         self._vulnerabilidades: dict[str, Vulnerabilidade] = {}
 
-    # --- Encapsulamento: atributos validados via property ----------------
+    # --- Encapsulamento: atributos validados via property ---
     @property
     def id_ativo(self) -> int:
         """Identificador único: somente leitura depois de criado."""
@@ -169,7 +169,7 @@ class Equipamento(ABC):
         """Cópia da lista: quem está de fora não altera o dicionário interno."""
         return list(self._vulnerabilidades.values())
 
-    # --- Vulnerabilidades ---------------------------------------------------
+    # --- Vulnerabilidades ---
     def adicionar_vulnerabilidade(self, vulnerabilidade: Vulnerabilidade) -> None:
         if vulnerabilidade.cve in self._vulnerabilidades:
             raise ValueError(f"O ativo já possui a vulnerabilidade {vulnerabilidade.cve}.")
@@ -181,14 +181,13 @@ class Equipamento(ABC):
     def remover_vulnerabilidade(self, cve: str) -> bool:
         return self._vulnerabilidades.pop(cve.strip().upper(), None) is not None
 
-    # --- Polimorfismo -------------------------------------------------------
+    # --- Polimorfismo ---
     @abstractmethod
     def fator_exposicao(self) -> float:
         """Peso do tipo de ativo no risco próprio: b_i = (1 + fator) * (M v)_i."""
 
     def com_novo_tipo(self, novo_tipo: TipoAtivo) -> "Equipamento":
-        """Trocar o tipo exige trocar a classe: cria o objeto da subclasse certa
-        mantendo os dados e as vulnerabilidades."""
+        """Cria um ativo novo da classe certa quando o tipo muda, mantendo dados e vulnerabilidades."""
         novo = criar_equipamento(
             novo_tipo, self.id_ativo, self.hostname, self.responsavel,
             self.localizacao, self.descricao,
@@ -196,7 +195,7 @@ class Equipamento(ABC):
         novo._vulnerabilidades = dict(self._vulnerabilidades)
         return novo
 
-    # --- Serialização -------------------------------------------------------
+    # --- Serialização ---
     def to_dict(self) -> dict:
         return {
             "id": self.id_ativo,
