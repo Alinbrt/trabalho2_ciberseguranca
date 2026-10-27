@@ -300,10 +300,7 @@ def criar_equipamento(
 
 
 class Dependencia:
-    """Fração do risco do ativo de ORIGEM (j) transmitida ao ativo de DESTINO (i).
-
-    Corresponde a A[i][j] = fracao no modelo x = b + A x.
-    """
+    """Representa que um ativo não é afetado sozinho: o risco da origem respinga no destino, numa certa fração."""
 
     def __init__(self, id_origem: int, id_destino: int, fracao: float):
         self.id_origem = _inteiro_positivo(id_origem, "ativo de origem")
