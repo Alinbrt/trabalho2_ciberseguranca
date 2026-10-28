@@ -29,9 +29,7 @@ class Inventario:
         self.avisos: list[str] = []  # problemas encontrados no carregamento
         self._carregar()
 
-    # ------------------------------------------------------------------
-    # Carregamento e gravação
-    # ------------------------------------------------------------------
+
     def _carregar(self) -> None:
         for registro in self._ler(self._repo_ativos):
             try:
@@ -68,9 +66,7 @@ class Inventario:
         self._ativos[ativo.id_ativo] = ativo
         self._id_por_hostname[chave_host] = ativo.id_ativo
 
-    # ------------------------------------------------------------------
-    # Consultas
-    # ------------------------------------------------------------------
+   
     @property
     def ativos(self) -> list[Equipamento]:
         """Ativos ordenados por ID (a ordem define as linhas das matrizes)."""
@@ -115,9 +111,7 @@ class Inventario:
             return self.buscar_por_id(int(termo))
         return self.buscar_por_hostname(termo)
 
-    # ------------------------------------------------------------------
-    # CRUD de ativos
-    # ------------------------------------------------------------------
+    
     def cadastrar_ativo(self, ativo: Equipamento) -> None:
         for vulnerabilidade in ativo.vulnerabilidades:
             self.verificar_consistencia(vulnerabilidade)
@@ -173,9 +167,7 @@ class Inventario:
         self._salvar()
         return ativo
 
-    # ------------------------------------------------------------------
-    # Vulnerabilidades
-    # ------------------------------------------------------------------
+    
     def _vulnerabilidade_existente(self, identificador: str) -> Vulnerabilidade | None:
         """Procura o identificador em qualquer ativo do inventário."""
         for ativo in self._ativos.values():
@@ -222,9 +214,7 @@ class Inventario:
             raise ErroInventario(f"O ativo {id_ativo} não possui a vulnerabilidade {identificador}.")
         self._salvar()
 
-    # ------------------------------------------------------------------
-    # Dependências (matriz A)
-    # ------------------------------------------------------------------
+    
     def soma_linha(self, id_destino: int, ignorar_origem: int | None = None) -> float:
         """Soma das frações herdadas pelo ativo de destino (soma da linha i de A)."""
         return sum(
