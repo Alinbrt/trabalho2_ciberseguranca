@@ -52,9 +52,6 @@ class ModeloAnaliseRisco:
         self._indexar_vulnerabilidades()
         self.A = self._montar_matriz_dependencias(dependencias)
 
-    # ------------------------------------------------------------------
-    # Montagem das estruturas
-    # ------------------------------------------------------------------
     def _indexar_vulnerabilidades(self) -> None:
         """Mapeia cada CVE único para uma coluna j (dicionário CVE -> índice)."""
         self.indice_vulnerabilidade: dict[str, int] = {}
@@ -96,9 +93,6 @@ class ModeloAnaliseRisco:
         """W = diag(1 + fator_exposicao): o polimorfismo entra no modelo aqui."""
         return np.diag([1.0 + eq.fator_exposicao() for eq in self.equipamentos])
 
-    # ------------------------------------------------------------------
-    # Cálculos
-    # ------------------------------------------------------------------
     def calcular_risco_proprio(self) -> np.ndarray:
         """b = W M v. M leva o espaço das vulnerabilidades ao dos equipamentos."""
         return self.matriz_exposicao() @ self.matriz_incidencia() @ self.vetor_severidade()
