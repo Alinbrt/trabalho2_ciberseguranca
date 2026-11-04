@@ -98,6 +98,11 @@ class TestModelos(unittest.TestCase):
             with self.assertRaises(ValueError):
                 criar_equipamento(TipoAtivo.NOTEBOOK, 1, "nb", ataque, "Sala 1")
 
+    def test_hostname_bloqueia_injecao(self):
+        for ataque in ("<script>alert('x')</script>", "'; DROP TABLE ativos; --", "a" * 60):
+            with self.assertRaises(ValueError):
+                criar_equipamento(TipoAtivo.NOTEBOOK, 1, ataque, "Ana", "Sala 1")
+
     def test_seis_tipos_com_fatores_proprios(self):
         fatores = {t: criar_equipamento(t, 1, "h", "Ana", "Sala").fator_exposicao()
                    for t in TipoAtivo}

@@ -24,6 +24,16 @@ def validar_responsavel(nome) -> str:
     return nome
 
 
+def validar_hostname(nome):
+    nome = _texto_obrigatorio(nome, "hostname")
+    if len(nome) > 50:
+        raise ValueError("Hostname muito longo (máximo 50 caracteres).")
+    for caractere in nome:
+        if not (caractere.isalnum() or caractere in ".-_"):
+            raise ValueError("Hostname só pode ter letras, números, pontos, hífen e sublinhado.")
+    return nome
+
+
 def _inteiro_positivo(valor, campo: str) -> int:
     # O identificador precisa ser um número inteiro maior que zero.
     if not isinstance(valor, int) or valor <=0:
@@ -134,7 +144,7 @@ class Equipamento(ABC):
 
     @hostname.setter
     def hostname(self, valor: str) -> None:
-        self._hostname = _texto_obrigatorio(valor, "hostname")
+        self._hostname = validar_hostname(valor)
 
     @property
     def responsavel(self) -> str:
