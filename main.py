@@ -117,17 +117,10 @@ class AplicacaoCLI:
     def __init__(self, inventario: Inventario):
         self.inventario = inventario
         self.opcoes = {
-            "1": ("Cadastrar Ativo", self.cadastrar_ativo),
-            "2": ("Buscar Ativo por ID", self.buscar_por_id),
-            "3": ("Buscar Ativo por Hostname", self.buscar_por_hostname),
-            "4": ("Atualizar Ativo", self.atualizar_ativo),
-            "5": ("Deletar Ativo", self.deletar_ativo),
-            "6": ("Cadastrar Vulnerabilidade em Ativo", self.cadastrar_vulnerabilidade),
-            "7": ("Listar Vulnerabilidades de um Ativo", self.listar_vulnerabilidades),
-            "8": ("Listar Todos os Ativos", self.listar_ativos),
-            "9": ("Atualizar Status / Remover Vulnerabilidade", self.menu_tratamento),
-            "10": ("Dependências entre Ativos", self.menu_dependencias),
-            "11": ("Análise de Risco (risco próprio e efetivo)", self.analise_risco),
+            "1": ("Ativos", self.menu_ativos),
+            "2": ("Vulnerabilidades", self.menu_vulnerabilidades),
+            "3": ("Dependências entre Ativos", self.menu_dependencias),
+            "4": ("Análise de Risco (risco próprio e efetivo)", self.analise_risco),
         }
 
 
@@ -305,11 +298,24 @@ class AplicacaoCLI:
         for vuln in vulnerabilidades:
             print(f"  - {vuln}")
 
-    def menu_tratamento(self) -> None:
-        self._submenu("Tratamento de Vulnerabilidades", {
-            "1": ("Atualizar status de tratamento", self.atualizar_status),
-            "2": ("Remover vulnerabilidade de um ativo", self.remover_vulnerabilidade),
+    def menu_ativos(self) -> None:
+        self._submenu("Ativos", {
+            "1": ("Cadastrar ativo", self.cadastrar_ativo),
+            "2": ("Buscar por ID", self.buscar_por_id),
+            "3": ("Buscar por hostname", self.buscar_por_hostname),
+            "4": ("Atualizar ativo", self.atualizar_ativo),
+            "5": ("Deletar ativo", self.deletar_ativo),
+            "6": ("Listar todos os ativos", self.listar_ativos),
+        })       
+
+    def menu_vulnerabilidades(self) -> None:
+        self._submenu("Vulnerabilidades", {
+            "1": ("Cadastrar vulnerabilidade", self.cadastrar_vulnerabilidade),
+            "2": ("Listar vulnerabilidades de um ativo", self.listar_vulnerabilidades),
+            "3": ("Atualizar status de tratamento", self.atualizar_status),
+            "4": ("Remover vulnerabilidade", self.remover_vulnerabilidade),
         })
+
 
     def atualizar_status(self) -> None:
         ativo = self.inventario.buscar_por_id(Entrada.inteiro("ID do Ativo"))
