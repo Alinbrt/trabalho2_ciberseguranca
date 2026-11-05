@@ -2,6 +2,8 @@
 
 import os
 import sys
+import logging
+import time
 
 import numpy as np
 
@@ -128,9 +130,7 @@ class AplicacaoCLI:
             "11": ("Análise de Risco (risco próprio e efetivo)", self.analise_risco),
         }
 
-    # ------------------------------------------------------------------
-    # Laço principal
-    # ------------------------------------------------------------------
+
     def executar(self) -> None:
         for aviso in self.inventario.avisos:
             print(f"Aviso: {aviso}")
@@ -177,9 +177,7 @@ class AplicacaoCLI:
     def _selecionar_ativo(self, rotulo: str = "ID ou hostname do ativo") -> Equipamento:
         return self.inventario.buscar(Entrada.texto(rotulo))
 
-    # ------------------------------------------------------------------
-    # CRUD de ativos
-    # ------------------------------------------------------------------
+   
     def cadastrar_ativo(self) -> None:
         print("\n[Cadastro de ativo]  (digite 'c' a qualquer momento para cancelar)")
         # Verifica duplicidade logo na digitação, sem fazer o usuário preencher tudo antes
@@ -267,9 +265,6 @@ class AplicacaoCLI:
         else:
             print("Remoção cancelada.")
 
-    # ------------------------------------------------------------------
-    # Vulnerabilidades
-    # ------------------------------------------------------------------
     def _ler_vulnerabilidade(self, ativo: Equipamento) -> Vulnerabilidade:
         sugestao = self.inventario.proximo_id_vulnerabilidade()
         # Evita sugerir um identificador que já está neste ativo (cadastro com várias iniciais)
@@ -335,9 +330,7 @@ class AplicacaoCLI:
         self.inventario.remover_vulnerabilidade(ativo.id_ativo, identificador)
         print("[+] Vulnerabilidade removida.")
 
-    # ------------------------------------------------------------------
-    # Dependências
-    # ------------------------------------------------------------------
+    
     def menu_dependencias(self) -> None:
         self._submenu("Dependências entre Ativos", {
             "1": ("Cadastrar/atualizar dependência", self.cadastrar_dependencia),
@@ -371,9 +364,7 @@ class AplicacaoCLI:
         self.inventario.remover_dependencia(origem.id_ativo, destino.id_ativo)
         print("[+] Dependência removida.")
 
-    # ------------------------------------------------------------------
-    # Análise de risco
-    # ------------------------------------------------------------------
+    
     def analise_risco(self) -> None:
         modelo = ModeloAnaliseRisco(self.inventario.ativos, self.inventario.dependencias)
         if modelo.n == 0:
@@ -403,7 +394,26 @@ class AplicacaoCLI:
                 print(f"\nA (dependências, {modelo.n}x{modelo.n}):\n{modelo.A}")
 
 
+INTERVALO_SEGUNDOS = 10
+
+def modo_servidor() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    inventario = Inventario(os.environ.get("INVENTARIO_DADOS", "dados"))
+    logging.info("Modo servidor iniciado. Aplicacao no ar.")
+
+    while True:
+        try:
+            quantidade = len(inventario.ativos)
+            logging.info("Batimento: aplicacao viva, %d ativos cadastrados.", quantidade)
+        except Exception as erro:
+            logging.error("Erro no ciclo do servidor: %s", erro)
+        time.sleep(INTERVALO_SEGUNDOS)
+
+
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "servidor":
+        modo_servidor()
+        return
     # A pasta de dados pode ser trocada por variável de ambiente (útil no Docker, Sprint 4)
     pasta_dados = os.environ.get("INVENTARIO_DADOS", "dados")
     try:
