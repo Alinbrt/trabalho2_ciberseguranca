@@ -5,11 +5,14 @@ from abc import ABC, abstractmethod
 from enums import Severidade, StatusTratamento, TipoAtivo
 
 
-def _texto_obrigatorio(valor, campo: str) -> str:
-    """Impede um campo vazio e retorna o texto sem espaços nas pontas."""
+def _texto_obrigatorio(valor, campo: str, maximo: int = 100) -> str:
+    """Garante texto preenchido, comprime espaços e limita o tamanho."""
     if not isinstance(valor, str) or not valor.strip():
         raise ValueError(f"O campo '{campo}' é obrigatório.")
-    return valor.strip()
+    valor = " ".join(valor.split())  # tira espaços das pontas E comprime os do meio
+    if len(valor) > maximo:
+        raise ValueError(f"O campo '{campo}' é muito longo (máximo {maximo} caracteres).")
+    return valor
 
 
 def validar_responsavel(nome) -> str:
